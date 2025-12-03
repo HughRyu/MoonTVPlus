@@ -34,11 +34,6 @@ export default function DoubanComments({ doubanId }: DoubanCommentsProps) {
 
   const enableComments = useEnableComments();
 
-  // 如果评论功能被禁用，不显示任何内容
-  if (!enableComments) {
-    return null;
-  }
-
   const fetchComments = useCallback(async (startIndex: number) => {
     try {
       console.log('正在获取评论，起始位置:', startIndex);
@@ -128,6 +123,11 @@ export default function DoubanComments({ doubanId }: DoubanCommentsProps) {
       </div>
     );
   };
+
+  // 如果评论功能被禁用，不显示任何内容
+  if (!enableComments) {
+    return null;
+  }
 
   // 初始状态：显示查看评论按钮
   if (!hasStartedLoading) {

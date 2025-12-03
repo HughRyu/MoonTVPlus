@@ -2,13 +2,9 @@
 
 'use client';
 
-import Artplayer from 'artplayer';
-import artplayerPluginDanmuku from 'artplayer-plugin-danmuku';
-import Hls from 'hls.js';
 import { Heart } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useRef, useState } from 'react';
-import { render as anime4kRender } from 'anime4k-webgpu';
 
 
 import {
@@ -686,7 +682,7 @@ function PlayPageClient() {
       canvas.style.cursor = 'pointer';
 
       // 在canvas上监听点击事件，触发播放器的暂停/播放切换
-      const handleCanvasClick = (e: MouseEvent) => {
+      const handleCanvasClick = () => {
         if (artPlayerRef.current) {
           artPlayerRef.current.toggle();
         }
@@ -694,7 +690,7 @@ function PlayPageClient() {
       canvas.addEventListener('click', handleCanvasClick);
 
       // 在canvas上监听双击事件，触发全屏切换
-      const handleCanvasDblClick = (e: MouseEvent) => {
+      const handleCanvasDblClick = () => {
         if (artPlayerRef.current) {
           artPlayerRef.current.fullscreen = !artPlayerRef.current.fullscreen;
         }
@@ -703,36 +699,37 @@ function PlayPageClient() {
 
       // 隐藏原始video元素
       video.style.display = 'none';
-      
+
       // 插入canvas到容器
       container.insertBefore(canvas, video);
 
-      // 动态导入对应的模式
+      // 动态导入 anime4k-webgpu 及对应的模式
+      const { render: anime4kRender, ModeA, ModeB, ModeC, ModeAA, ModeBB, ModeCA } = await import('anime4k-webgpu');
+
       let ModeClass: any;
       const modeName = anime4kModeRef.current;
-      const modeModule = await import('anime4k-webgpu');
 
       switch (modeName) {
         case 'ModeA':
-          ModeClass = modeModule.ModeA;
+          ModeClass = ModeA;
           break;
         case 'ModeB':
-          ModeClass = modeModule.ModeB;
+          ModeClass = ModeB;
           break;
         case 'ModeC':
-          ModeClass = modeModule.ModeC;
+          ModeClass = ModeC;
           break;
         case 'ModeAA':
-          ModeClass = modeModule.ModeAA;
+          ModeClass = ModeAA;
           break;
         case 'ModeBB':
-          ModeClass = modeModule.ModeBB;
+          ModeClass = ModeBB;
           break;
         case 'ModeCA':
-          ModeClass = modeModule.ModeCA;
+          ModeClass = ModeCA;
           break;
         default:
-          ModeClass = modeModule.ModeA;
+          ModeClass = ModeA;
       }
 
       // 使用anime4k-webgpu的render函数
@@ -1005,38 +1002,41 @@ function PlayPageClient() {
     }
   };
 
-  class CustomHlsJsLoader extends Hls.DefaultConfig.loader {
-    constructor(config: any) {
-      super(config);
-      const load = this.load.bind(this);
-      this.load = function (context: any, config: any, callbacks: any) {
-        // 拦截manifest和level请求
-        if (
-          (context as any).type === 'manifest' ||
-          (context as any).type === 'level'
-        ) {
-          const onSuccess = callbacks.onSuccess;
-          callbacks.onSuccess = function (
-            response: any,
-            stats: any,
-            context: any
+  // 创建自定义 HLS loader 的工厂函数
+  const createCustomHlsLoader = (HlsLib: any) => {
+    return class CustomHlsJsLoader extends HlsLib.DefaultConfig.loader {
+      constructor(config: any) {
+        super(config);
+        const load = this.load.bind(this);
+        this.load = function (context: any, config: any, callbacks: any) {
+          // 拦截manifest和level请求
+          if (
+            (context as any).type === 'manifest' ||
+            (context as any).type === 'level'
           ) {
-            // 如果是m3u8文件，处理内容以移除广告分段
-            if (response.data && typeof response.data === 'string') {
-              // 过滤掉广告段 - 实现更精确的广告过滤逻辑
-              response.data = filterAdsFromM3U8(
-                currentSourceRef.current,
-                response.data
-              );
-            }
-            return onSuccess(response, stats, context, null);
-          };
-        }
-        // 执行原始load方法
-        load(context, config, callbacks);
-      };
-    }
-  }
+            const onSuccess = callbacks.onSuccess;
+            callbacks.onSuccess = function (
+              response: any,
+              stats: any,
+              context: any
+            ) {
+              // 如果是m3u8文件，处理内容以移除广告分段
+              if (response.data && typeof response.data === 'string') {
+                // 过滤掉广告段 - 实现更精确的广告过滤逻辑
+                response.data = filterAdsFromM3U8(
+                  currentSourceRef.current,
+                  response.data
+                );
+              }
+              return onSuccess(response, stats, context, null);
+            };
+          }
+          // 执行原始load方法
+          load(context, config, callbacks);
+        };
+      }
+    };
+  };
 
   // 当集数索引变化时自动更新视频地址
   useEffect(() => {
@@ -1503,8 +1503,9 @@ function PlayPageClient() {
     }
   };
 
-  // 手动重新选择弹幕源（忽略记忆）
-  const handleReselectDanmakuSource = async () => {
+  // 手动重新选择弹幕源（忽略记忆）- 保留供将来使用
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _handleReselectDanmakuSource = async () => {
     const title = videoTitleRef.current;
     if (!title) {
       console.warn('视频标题为空，无法搜索弹幕');
@@ -1920,8 +1921,6 @@ function PlayPageClient() {
 
   useEffect(() => {
     if (
-      !Artplayer ||
-      !Hls ||
       !videoUrl ||
       loading ||
       currentEpisodeIndex === null ||
@@ -1973,13 +1972,29 @@ function PlayPageClient() {
       cleanupPlayer();
     }
 
-    try {
-      // 创建新的播放器实例
-      Artplayer.PLAYBACK_RATE = [0.5, 0.75, 1, 1.25, 1.5, 2, 3];
-      Artplayer.USE_RAF = true;
+    // 异步初始化播放器
+    const initPlayer = async () => {
+      try {
+        // 动态导入播放器库
+        const [ArtplayerModule, HlsModule, DanmukuPlugin] = await Promise.all([
+          import('artplayer'),
+          import('hls.js'),
+          import('artplayer-plugin-danmuku'),
+        ]);
 
-      artPlayerRef.current = new Artplayer({
-        container: artRef.current,
+        const Artplayer = ArtplayerModule.default;
+        const Hls = HlsModule.default;
+        const artplayerPluginDanmuku = DanmukuPlugin.default as any;
+
+        // 创建自定义 HLS loader
+        const CustomHlsJsLoader = createCustomHlsLoader(Hls);
+
+        // 创建新的播放器实例
+        Artplayer.PLAYBACK_RATE = [0.5, 0.75, 1, 1.25, 1.5, 2, 3];
+        Artplayer.USE_RAF = true;
+
+        artPlayerRef.current = new Artplayer({
+          container: artRef.current!,
         url: videoUrl,
         poster: videoCover,
         volume: 0.7,
@@ -2034,9 +2049,9 @@ function PlayPageClient() {
               maxBufferSize: 60 * 1000 * 1000, // 约 60MB，超出后触发清理
 
               /* 自定义loader */
-              loader: blockAdEnabledRef.current
+              loader: (blockAdEnabledRef.current
                 ? CustomHlsJsLoader
-                : Hls.DefaultConfig.loader,
+                : Hls.DefaultConfig.loader) as any,
             });
 
             hls.loadSource(url);
@@ -2513,10 +2528,14 @@ function PlayPageClient() {
           videoUrl
         );
       }
-    } catch (err) {
-      console.error('创建播放器失败:', err);
-      setError('播放器初始化失败');
-    }
+      } catch (err) {
+        console.error('创建播放器失败:', err);
+        setError('播放器初始化失败');
+      }
+    };
+
+    // 调用异步初始化函数
+    initPlayer();
   }, [videoUrl, loading, blockAdEnabled, currentEpisodeIndex, detail]);
 
   // 当组件卸载时清理定时器、Wake Lock 和播放器资源

@@ -4078,7 +4078,7 @@ const SiteConfigComponent = ({ config, refreshConfig }: { config: AdminConfig | 
                     </span>
                   </div>
                   <p className='text-sm text-yellow-700 dark:text-yellow-400'>
-                    评论功能为逆向抓取豆瓣评论数据，开启后请自行承担相关责任和风险。
+                    评论功能为逆向抓取豆瓣评论数据，此功能仅供学习，开启后请自行承担相关责任和风险。
                   </p>
                 </div>
               </div>
