@@ -46,7 +46,7 @@ import {
   saveDanmakuAnimeId,
   getDanmakuAnimeId,
 } from '@/lib/danmaku/selection-memory';
-import type { DanmakuAnime, DanmakuSelection, DanmakuSettings } from '@/lib/danmaku/types';
+import type { DanmakuAnime, DanmakuSelection, DanmakuSettings, DanmakuComment } from '@/lib/danmaku/types';
 import { SearchResult, DanmakuFilterConfig, EpisodeFilterConfig } from '@/lib/types';
 import { getVideoResolutionFromM3u8, processImageUrl } from '@/lib/utils';
 
@@ -3028,6 +3028,82 @@ function PlayPageClient() {
     } catch (error) {
       console.error('加载弹幕失败:', error);
       setDanmakuCount(0);
+    } finally {
+      setDanmakuLoading(false);
+    }
+  };
+
+  // 处理上传弹幕
+  const handleUploadDanmaku = async (comments: DanmakuComment[]) => {
+    setDanmakuLoading(true);
+
+    try {
+      // 缓存到IndexedDB
+      const title = videoTitleRef.current;
+      const episodeIndex = currentEpisodeIndexRef.current;
+      if (title) {
+        const { saveDanmakuToCache } = await import('@/lib/danmaku/cache');
+        await saveDanmakuToCache(title, episodeIndex, comments);
+      }
+
+      // 转换弹幕格式
+      let danmakuData = convertDanmakuFormat(comments);
+
+      // 应用过滤规则
+      const filterConfig = danmakuFilterConfigRef.current;
+      if (filterConfig && filterConfig.rules.length > 0) {
+        danmakuData = danmakuData.filter((danmu) => {
+          for (const rule of filterConfig.rules) {
+            if (!rule.enabled) continue;
+            try {
+              if (rule.type === 'normal') {
+                if (danmu.text.includes(rule.keyword)) return false;
+              } else if (rule.type === 'regex') {
+                if (new RegExp(rule.keyword).test(danmu.text)) return false;
+              }
+            } catch (e) {
+              console.error('弹幕过滤规则错误:', e);
+            }
+          }
+          return true;
+        });
+      }
+
+      // 加载弹幕到播放器
+      if (danmakuPluginRef.current) {
+        danmakuPluginRef.current.hide();
+        danmakuPluginRef.current.config({ danmuku: [] });
+        danmakuPluginRef.current.load();
+
+        const currentSettings = danmakuSettingsRef.current;
+        danmakuPluginRef.current.config({
+          danmuku: danmakuData,
+          speed: currentSettings.speed,
+          opacity: currentSettings.opacity,
+          fontSize: currentSettings.fontSize,
+          margin: [currentSettings.marginTop, currentSettings.marginBottom],
+          synchronousPlayback: currentSettings.synchronousPlayback,
+        });
+        danmakuPluginRef.current.load();
+
+        if (currentSettings.enabled) {
+          danmakuPluginRef.current.show();
+        } else {
+          danmakuPluginRef.current.hide();
+        }
+      }
+
+      setDanmakuCount(danmakuData.length);
+      if (artPlayerRef.current) {
+        artPlayerRef.current.notice.show = `上传成功，共 ${danmakuData.length} 条弹幕`;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+    } catch (error) {
+      console.error('上传弹幕失败:', error);
+      if (artPlayerRef.current) {
+        artPlayerRef.current.notice.show = '弹幕加载失败';
+      }
     } finally {
       setDanmakuLoading(false);
     }
@@ -6421,6 +6497,7 @@ function PlayPageClient() {
                 precomputedVideoInfo={precomputedVideoInfo}
                 onDanmakuSelect={handleDanmakuSelect}
                 currentDanmakuSelection={currentDanmakuSelection}
+                onUploadDanmaku={handleUploadDanmaku}
                 episodeFilterConfig={episodeFilterConfig}
                 onFilterConfigUpdate={setEpisodeFilterConfig}
                 onShowToast={(message, type) => {
