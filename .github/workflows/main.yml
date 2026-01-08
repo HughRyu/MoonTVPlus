@@ -1,20 +1,19 @@
-name: Scheduled Merge Remote Action
+name: Sync Upstream
 on:
   schedule:
-    - cron:  '0 */8 * * *'
+    - cron: '0 */8 * * *'
   workflow_dispatch:
 
 jobs:
-  merge-upstream:
+  sync-up:
     runs-on: ubuntu-latest
-    steps: 
-      - name: Checkout
+    steps:
+      - name: Checkout target repo
         uses: actions/checkout@v4
         with:
-          ref: main
-          fetch-depth: 0 
-          
-      - name: Sync Upstream
+          fetch-depth: 0
+
+      - name: Sync with Upstream
         uses: aormsby/fork-sync-with-upstream-action@v3.4.1
         with:
           target_sync_branch: main
@@ -22,4 +21,6 @@ jobs:
           upstream_sync_branch: main
           upstream_sync_repo: mtvpls/MoonTVPlus
 
-          test_mode: false
+      - name: Check for Failure
+        if: failure()
+        run: echo "同步失败，通常是因为你修改过代码导致了冲突，请手动解决。"
