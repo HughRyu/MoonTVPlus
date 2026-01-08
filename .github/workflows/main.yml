@@ -1,0 +1,25 @@
+name: Scheduled Merge Remote Action
+on:
+  schedule:
+    - cron:  '0 */8 * * *'
+  workflow_dispatch:
+
+jobs:
+  merge-upstream:
+    runs-on: ubuntu-latest
+    steps: 
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0 
+          
+      - name: Sync Upstream
+        uses: aormsby/fork-sync-with-upstream-action@v3.4.1
+        with:
+          target_sync_branch: main
+          target_repo_token: ${{ secrets.GITHUB_TOKEN }}
+          upstream_sync_branch: main
+          upstream_sync_repo: mtvpls/MoonTVPlus
+
+          test_mode: false
